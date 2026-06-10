@@ -115,7 +115,7 @@
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 14px;
       padding: 0 28px;
-      margin-bottom: 16px;
+      margin-bottom: 20px;
     }
     .rank-box {
       background: #fff;
@@ -145,20 +145,6 @@
     .rank-box tr:last-child td { border-bottom: none; }
     .rank-ach td:last-child { color: #047857; }
     .rank-oee td:last-child { color: #1d4ed8; }
-
-    /* Drop alert */
-    .drop-box {
-      background: #fff7ed;
-      border-left: 4px solid #f97316;
-      padding: 14px 16px;
-      border-radius: 8px;
-      margin: 0 28px 20px;
-      font-size: 14px;
-    }
-    .drop-box b { color: #9a3412; }
-    .drop-box ul { margin: 8px 0 0; padding-left: 20px; }
-    .drop-box li { padding: 3px 0; }
-    .drop-box .ok { color: #65a30d; margin-top: 6px; display: block; }
 
     /* Cards grid */
     .grid {
@@ -254,7 +240,10 @@
     @media (max-width: 600px) {
       header { padding: 16px; }
       header h1 { font-size: 18px; }
-      .section-title, .snap-grid, .rank-grid, .drop-box, .grid { padding-left: 14px; padding-right: 14px; margin-left: 0; margin-right: 0; }
+      .section-title, .snap-grid, .rank-grid, .grid {
+        padding-left: 14px; padding-right: 14px;
+        margin-left: 0; margin-right: 0;
+      }
       .card .kpis { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
@@ -279,7 +268,7 @@
     /* ==========================================================
        API ENDPOINT — Apps Script Web App
        ========================================================== */
-    const API = "https://script.google.com/macros/s/AKfycbykeUhIFbFr0UD7iF2T2DFg4BxyqPgOXS30bIokmKhBvdLhjAKWEGnx1Z86nubs15CQRw/exec";
+    const API = "https://script.google.com/macros/s/AKfycbyIaNp1sN-ZG3GxdsCrGUUzFAtITJ-aeaeimIBWf2TZ-fj8L0hiOTs-7O84z0rd4t4iHw/exec";
 
     /* ==========================================================
        LOAD DATA
@@ -344,13 +333,6 @@
       const ach = a.byAchievement || (a.best ? { best: a.best, worst: a.worst, sorted: [] } : { best: null, worst: null, sorted: [] });
       const oee = a.byOEE         || { best: null, worst: null, sorted: [] };
 
-      const dropsHtml = (a.dropped && a.dropped.length)
-        ? `<ul>${a.dropped.map(d =>
-            `<li><b>${d.name}</b>: ${d.prevYesterday} → ${d.yesterday}
-             <span style="color:#b91c1c;font-weight:700">(${d.drop.toFixed(2)})</span></li>`
-          ).join("")}</ul>`
-        : `<span class="ok">✓ No production drop detected (or first run — baseline saved).</span>`;
-
       document.getElementById("summary").innerHTML = `
         <div class="snap-grid">
           ${tile("t-best-ach", "🏆 Best by Achievement",   ach.best,  "achievement", "Achievement")}
@@ -362,11 +344,6 @@
         <div class="rank-grid">
           ${rankBox("📈 Achievement Ranking", ach.sorted, "achievement", "rank-ach")}
           ${rankBox("⚙️ OEE Ranking",         oee.sorted, "oee",         "rank-oee")}
-        </div>
-
-        <div class="drop-box">
-          <b>📉 SBUs With Production Drop (vs previous day)</b>
-          ${dropsHtml}
         </div>
       `;
     }
