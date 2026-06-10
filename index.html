@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SBU Daily Status</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>SBU Daily Status Dashboard</h1>
+    <p id="lastUpdate"></p>
+    <button onclick="loadData()">🔄 Refresh</button>
+  </header>
+  <main id="cards" class="grid">Loading…</main>
+
+  <script>
+    const API = "PASTE_YOUR_WEB_APP_URL_HERE";
+
+    async function loadData() {
+      document.getElementById("cards").innerHTML = "Loading…";
+      try {
+        const r = await fetch(API);
+        const j = await r.json();
+        render(j.data);
+        document.getElementById("lastUpdate").textContent =
+          "Last refresh: " + new Date().toLocaleString();
+      } catch (e) {
+        document.getElementById("cards").innerHTML = "❌ Error: " + e.message;
+      }
+    }
+
+    function render(list) {
+      document.getElementById("cards").innerHTML = list.map(s => `
+        <div class="card">
+          <h2>${s.name}</h2>
+          <span class="date">${s.date}</span>
+          <div class="kpis">
+            <div><b>${s.production.yesterday}</b><span>Yesterday Prod.</span></div>
+            <div><b>${s.production.achievement}</b><span>Achievement</span></div>
+            <div><b>${s.production.oee}</b><span>OEE</span></div>
+            <div><b>${s.production.npt}</b><span>NPT</span></div>
+          </div>
+          <p>MTD Production: <b>${s.mtdProduction}</b></p>
+          <p>Downtime — Yest: ${s.npt.yesterdayDowntime} | MTD: ${s.npt.mtdDowntime}</p>
+          <p>5S: ${s.quality.fiveS} | QCP: ${s.quality.qcp} | Audit: ${s.quality.totalAudit}</p>
+          <p>Kaizen — C:${s.kaizen.complete} / I:${s.kaizen.initiated} / R:${s.kaizen.rejected}</p>
+          <p>PS Cards — Ongoing:${s.psCards.ongoing} / Complete:${s.psCards.complete}</p>
+        </div>`).join("");
+    }
+    loadData();
+  </script>
+</body>
+</html>
