@@ -1,142 +1,186 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>SBU Daily Status</title>
-  <link rel="stylesheet" href="style.css">
-  <style>
-    /* Inline polish (works even without style.css) */
-    .snap-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin:14px 0; }
-    .tile { padding:14px 16px; border-radius:10px; color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.12); }
-    .tile .lbl { font-size:11px; letter-spacing:.5px; text-transform:uppercase; opacity:.9; }
-    .tile .nm  { font-size:20px; font-weight:700; margin:4px 0 6px; }
-    .tile .v   { font-size:12px; opacity:.95; }
-    .t-best-ach { background:linear-gradient(135deg,#10b981,#047857); }
-    .t-best-oee { background:linear-gradient(135deg,#3b82f6,#1d4ed8); }
-    .t-low-ach  { background:linear-gradient(135deg,#f97316,#c2410c); }
-    .t-low-oee  { background:linear-gradient(135deg,#ef4444,#b91c1c); }
-    .rank-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin:10px 0 14px; }
-    .rank-box  { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; }
-    .rank-box h4 { margin:0 0 6px; color:#0f172a; font-size:14px; }
-    .rank-box table { width:100%; border-collapse:collapse; font-size:13px; }
-    .rank-box td { padding:6px 4px; border-bottom:1px solid #eef2f7; }
-    .rank-box td:last-child { text-align:right; font-weight:700; }
-    .drop-box  { background:#fff7ed; border-left:4px solid #f97316; padding:12px 14px; border-radius:6px; }
-    .drop-box ul { margin:6px 0 0 18px; padding:0; }
-    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; color:#fff; margin-left:4px; }
-    .b-best-ach { background:#10b981; }
-    .b-best-oee { background:#3b82f6; }
-    .b-low-ach  { background:#f97316; }
-    .b-low-oee  { background:#ef4444; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>SBU Daily Status Dashboard</h1>
-    <p id="lastUpdate"></p>
-    <button onclick="loadData()">🔄 Refresh</button>
-  </header>
+/*************** HTML BUILDER (Polished) ***************/
+function buildHtml(data, analysis) {
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd-MMM-yyyy");
 
-  <section id="summary"></section>
-  <main id="cards" class="grid">Loading…</main>
+  // ── Helpers ─────────────────────────────────────────────────────────────
+  const fmtPct = v => (v === null || v === undefined || isNaN(v)) ? "—" : v + "%";
+  const ach = analysis.byAchievement;
+  const oee = analysis.byOEE;
 
-  <script>
-    const API = "https://script.google.com/macros/s/AKfycbyIaNp1sN-ZG3GxdsCrGUUzFAtITJ-aeaeimIBWf2TZ-fj8L0hiOTs-7O84z0rd4t4iHw/exec";
+  // Tile builder for best/worst highlight cards
+  function tile(label, sbu, kpiLabel, kpiValue, gradFrom, gradTo, accent) {
+    return `
+    <div style="flex:1;min-width:200px;background:linear-gradient(135deg,${gradFrom},${gradTo});
+                color:#fff;padding:14px 16px;border-radius:10px;
+                box-shadow:0 2px 6px rgba(0,0,0,.12)">
+      <div style="font-size:11px;letter-spacing:.5px;opacity:.9;text-transform:uppercase">${label}</div>
+      <div style="font-size:20px;font-weight:700;margin:4px 0 6px">
+        ${sbu ? sbu.name : "—"}
+      </div>
+      <div style="font-size:12px;opacity:.95">
+        ${kpiLabel}: <b>${sbu ? fmtPct(sbu[kpiValue]) : "—"}</b>
+      </div>
+    </div>`;
+  }
 
-    async function loadData() {
-      document.getElementById("cards").innerHTML = "Loading…";
-      document.getElementById("summary").innerHTML = "";
-      try {
-        const r = await fetch(API);
-        const j = await r.json();
-        renderSummary(j.analysis);
-        render(j.data, j.analysis);
-        document.getElementById("lastUpdate").textContent =
-          "Last refresh: " + new Date().toLocaleString();
-      } catch (e) {
-        document.getElementById("cards").innerHTML = "❌ Error: " + e.message;
-      }
-    }
-
-    const fmtPct = v => (v === null || v === undefined || isNaN(v)) ? "—" : v + "%";
-
-    function tile(cls, label, sbu, field, kpiLabel) {
-      const name = sbu ? sbu.name : "—";
-      const val  = sbu ? fmtPct(sbu[field]) : "—";
-      return `<div class="tile ${cls}">
-        <div class="lbl">${label}</div>
-        <div class="nm">${name}</div>
-        <div class="v">${kpiLabel}: <b>${val}</b></div>
+  // Ranking table builder (top 3 + bottom 1 style)
+  function rankTable(title, sortedList, field, color) {
+    if (!sortedList.length) return "";
+    const rows = sortedList.map((x, i) => {
+      const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i+1}.`;
+      return `
+        <tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #eef2f7">${medal}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #eef2f7"><b>${x.name}</b></td>
+          <td style="padding:6px 8px;border-bottom:1px solid #eef2f7;text-align:right;color:${color}">
+            <b>${fmtPct(x[field])}</b>
+          </td>
+        </tr>`;
+    }).join("");
+    return `
+      <div style="flex:1;min-width:240px;background:#fff;border:1px solid #e2e8f0;
+                  border-radius:8px;padding:10px 12px">
+        <div style="font-weight:700;color:#0f172a;margin-bottom:6px">${title}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          ${rows}
+        </table>
       </div>`;
-    }
+  }
 
-    function rankBox(title, sorted, field) {
-      if (!sorted || !sorted.length) return "";
-      const rows = sorted.map((x, i) => {
-        const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i+1)+".";
-        return `<tr><td>${medal}</td><td>${x.name}</td><td>${fmtPct(x[field])}</td></tr>`;
-      }).join("");
-      return `<div class="rank-box"><h4>${title}</h4><table>${rows}</table></div>`;
-    }
+  // ── Performance Snapshot Block ──────────────────────────────────────────
+  const summary = `
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;
+              margin:14px 0;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.05)">
+    <h3 style="margin:0 0 14px;color:#003366;border-bottom:2px solid #003366;padding-bottom:6px">
+      🧭 Performance Snapshot — Dual KPI View
+    </h3>
 
-    function renderSummary(a) {
-      if (!a) return;
-      const ach = a.byAchievement || { sorted:[] };
-      const oee = a.byOEE || { sorted:[] };
-      const drops = (a.dropped && a.dropped.length)
-        ? `<ul>${a.dropped.map(d => `<li><b>${d.name}</b>: ${d.prevYesterday} → ${d.yesterday} <span style="color:#b91c1c">(${d.drop.toFixed(2)})</span></li>`).join("")}</ul>`
-        : `<div style="color:#65a30d;margin-top:4px">✓ No production drop detected.</div>`;
+    <!-- Highlight tiles: 4 cards in a flex row -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      ${tile("🏆 Best by Achievement", ach.best,  "Achievement", "achievement", "#10b981", "#047857")}
+      ${tile("🚀 Best by OEE",         oee.best,  "OEE",         "oee",         "#3b82f6", "#1d4ed8")}
+      ${tile("⚠️ Lowest by Achievement", ach.worst, "Achievement", "achievement", "#f97316", "#c2410c")}
+      ${tile("🛑 Lowest by OEE",       oee.worst, "OEE",         "oee",         "#ef4444", "#b91c1c")}
+    </div>
 
-      document.getElementById("summary").innerHTML = `
-        <h2 style="margin:14px 0 8px">🧭 Performance Snapshot</h2>
-        <div class="snap-grid">
-          ${tile("t-best-ach","🏆 Best by Achievement", ach.best,  "achievement","Achievement")}
-          ${tile("t-best-oee","🚀 Best by OEE",         oee.best,  "oee",        "OEE")}
-          ${tile("t-low-ach", "⚠️ Lowest by Achievement",ach.worst, "achievement","Achievement")}
-          ${tile("t-low-oee", "🛑 Lowest by OEE",       oee.worst, "oee",        "OEE")}
+    <!-- Ranking tables -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      ${rankTable("📈 Achievement Ranking", ach.sorted, "achievement", "#047857")}
+      ${rankTable("⚙️ OEE Ranking",         oee.sorted, "oee",         "#1d4ed8")}
+    </div>
+
+    <!-- Production drops -->
+    <div style="background:#fff7ed;border-left:4px solid #f97316;
+                padding:12px 14px;border-radius:6px">
+      <b style="color:#9a3412">📉 SBUs With Production Drop (vs previous day)</b><br>
+      ${analysis.dropped.length
+        ? `<div style="margin-top:6px">` + analysis.dropped.map(d =>
+            `<div style="padding:4px 0;border-bottom:1px dashed #fed7aa">
+               • <b>${d.name}</b> — ${d.prevYesterday} → ${d.yesterday}
+               <span style="color:#b91c1c;font-weight:700">(${d.drop.toFixed(2)})</span>
+             </div>`
+          ).join("") + `</div>`
+        : `<div style="margin-top:4px;color:#65a30d"><i>✓ No production drop detected (or first run — baseline saved).</i></div>`}
+    </div>
+  </div>`;
+
+  // ── Main email body ─────────────────────────────────────────────────────
+  let html = `
+  <div style="font-family:Arial,sans-serif;max-width:920px;margin:auto;background:#f8fafc;padding:16px">
+    <div style="background:linear-gradient(135deg,#003366,#0369a1);color:#fff;
+                padding:16px 20px;border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,.1)">
+      <h2 style="margin:0">📊 Daily SBU Production & Quality Status</h2>
+      <p style="margin:4px 0 0;font-size:13px;opacity:.9">Report Date: ${today}</p>
+    </div>
+    <p style="text-align:center;margin:14px 0">
+      <a href="${WEBAPP_URL}" style="background:#0369a1;color:#fff;text-decoration:none;
+         padding:10px 22px;border-radius:6px;font-size:14px;font-weight:600;
+         box-shadow:0 2px 4px rgba(0,0,0,.1)">
+         🌐 Open Live Dashboard
+      </a>
+    </p>
+    ${summary}`;
+
+  // ── Per-SBU detailed cards (with multi-badge support) ──────────────────
+  data.forEach(s => {
+    const badges = [];
+    if (ach.best  && ach.best.name  === s.name) badges.push(`<span style="background:#10b981;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;margin-left:6px">BEST · ACH</span>`);
+    if (oee.best  && oee.best.name  === s.name) badges.push(`<span style="background:#3b82f6;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;margin-left:6px">BEST · OEE</span>`);
+    if (ach.worst && ach.worst.name === s.name) badges.push(`<span style="background:#f97316;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;margin-left:6px">LOW · ACH</span>`);
+    if (oee.worst && oee.worst.name === s.name) badges.push(`<span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;margin-left:6px">LOW · OEE</span>`);
+    const tag = badges.join("");
+
+    html += `
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;
+                margin:14px 0;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)">
+      <h3 style="color:#003366;margin:0 0 10px;border-bottom:2px solid #003366;padding-bottom:6px">
+        ${s.name} ${tag}
+        <span style="font-size:12px;color:#64748b;float:right">${s.date}</span>
+      </h3>
+
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="background:#f1f5f9">
+          <th style="padding:8px;border:1px solid #e2e8f0">Yesterday Prod.</th>
+          <th style="padding:8px;border:1px solid #e2e8f0">Achievement %</th>
+          <th style="padding:8px;border:1px solid #e2e8f0">OEE %</th>
+          <th style="padding:8px;border:1px solid #e2e8f0">NPT %</th>
+          <th style="padding:8px;border:1px solid #e2e8f0">MTD Prod.</th>
+        </tr>
+        <tr style="text-align:center">
+          <td style="padding:8px;border:1px solid #e2e8f0"><b>${s.production.yesterday}</b></td>
+          <td style="padding:8px;border:1px solid #e2e8f0">${s.production.achievement}</td>
+          <td style="padding:8px;border:1px solid #e2e8f0">${s.production.oee}</td>
+          <td style="padding:8px;border:1px solid #e2e8f0">${s.production.npt}</td>
+          <td style="padding:8px;border:1px solid #e2e8f0"><b>${s.mtdProduction}</b></td>
+        </tr>
+      </table>
+
+      <p style="margin:10px 0 4px;font-size:13px">
+        <b>Yesterday Downtime:</b> ${s.npt.yesterdayDowntime} &nbsp;|&nbsp;
+        <b>MTD Downtime:</b> ${s.npt.mtdDowntime}
+      </p>
+
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px">
+        <tr style="background:#fef3c7">
+          <th style="padding:6px;border:1px solid #fcd34d;text-align:left">Breakdown Type</th>
+          <th style="padding:6px;border:1px solid #fcd34d;text-align:left">Reason</th>
+          <th style="padding:6px;border:1px solid #fcd34d;text-align:left">Downtime</th>
+        </tr>
+        ${s.npt.topReasons.map(row =>
+          `<tr>
+            <td style="padding:5px;border:1px solid #fde68a">${row[0]||"—"}</td>
+            <td style="padding:5px;border:1px solid #fde68a">${row[1]||"—"}</td>
+            <td style="padding:5px;border:1px solid #fde68a">${row[2]||"—"}</td>
+           </tr>`
+        ).join("")}
+      </table>
+
+      <div style="background:#f0f9ff;padding:10px;border-radius:6px;margin-top:10px;font-size:13px">
+        <b>Quality:</b> 5S: ${s.quality.fiveS} | QCP %: ${s.quality.qcp} |
+        Test Done: ${s.quality.testDone} | Audit: ${s.quality.totalAudit} (Pass: ${s.quality.pass})<br>
+        <b>Notable Activity:</b> ${s.quality.notable || "—"}
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:10px;font-size:13px">
+        <div style="flex:1;background:#ecfdf5;padding:8px;border-radius:6px">
+          <b>Kaizen</b><br>
+          ✅ Complete: ${s.kaizen.complete}<br>
+          🟡 Initiated: ${s.kaizen.initiated}<br>
+          ❌ Rejected: ${s.kaizen.rejected}
         </div>
-        <div class="rank-grid">
-          ${rankBox("📈 Achievement Ranking", ach.sorted, "achievement")}
-          ${rankBox("⚙️ OEE Ranking",         oee.sorted, "oee")}
+        <div style="flex:1;background:#fef2f2;padding:8px;border-radius:6px">
+          <b>Problem Solving Cards</b><br>
+          🔄 Ongoing: ${s.psCards.ongoing}<br>
+          ✅ Complete: ${s.psCards.complete}
         </div>
-        <div class="drop-box">
-          <b style="color:#9a3412">📉 SBUs With Production Drop (vs previous day)</b>
-          ${drops}
-        </div>
-      `;
-    }
+      </div>
+    </div>`;
+  });
 
-    function render(list, a) {
-      const achBest  = a && a.byAchievement && a.byAchievement.best  ? a.byAchievement.best.name  : null;
-      const achWorst = a && a.byAchievement && a.byAchievement.worst ? a.byAchievement.worst.name : null;
-      const oeeBest  = a && a.byOEE && a.byOEE.best  ? a.byOEE.best.name  : null;
-      const oeeWorst = a && a.byOEE && a.byOEE.worst ? a.byOEE.worst.name : null;
-
-      document.getElementById("cards").innerHTML = list.map(s => {
-        let badges = "";
-        if (s.name === achBest)  badges += `<span class="badge b-best-ach">BEST · ACH</span>`;
-        if (s.name === oeeBest)  badges += `<span class="badge b-best-oee">BEST · OEE</span>`;
-        if (s.name === achWorst) badges += `<span class="badge b-low-ach">LOW · ACH</span>`;
-        if (s.name === oeeWorst) badges += `<span class="badge b-low-oee">LOW · OEE</span>`;
-        return `
-        <div class="card">
-          <h2>${s.name} ${badges}</h2>
-          <span class="date">${s.date}</span>
-          <div class="kpis">
-            <div><b>${s.production.yesterday}</b><span>Yesterday Prod.</span></div>
-            <div><b>${s.production.achievement}</b><span>Achievement</span></div>
-            <div><b>${s.production.oee}</b><span>OEE</span></div>
-            <div><b>${s.production.npt}</b><span>NPT</span></div>
-          </div>
-          <p>MTD Production: <b>${s.mtdProduction}</b></p>
-          <p>Downtime — Yest: ${s.npt.yesterdayDowntime} | MTD: ${s.npt.mtdDowntime}</p>
-          <p>5S: ${s.quality.fiveS} | QCP: ${s.quality.qcp} | Audit: ${s.quality.totalAudit}</p>
-          <p>Kaizen — C:${s.kaizen.complete} / I:${s.kaizen.initiated} / R:${s.kaizen.rejected}</p>
-          <p>PS Cards — Ongoing:${s.psCards.ongoing} / Complete:${s.psCards.complete}</p>
-        </div>`;
-      }).join("");
-    }
-    loadData();
-  </script>
-</body>
-</html>
+  html += `
+    <p style="text-align:center;margin-top:20px;font-size:11px;color:#888">
+      Auto-generated from Google Sheets · <a href="${WEBAPP_URL}">View Live Dashboard</a>
+    </p>
+  </div>`;
+  return html;
+}
