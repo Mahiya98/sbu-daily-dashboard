@@ -1,186 +1,424 @@
-/*************** HTML BUILDER (Polished) ***************/
-function buildHtml(data, analysis) {
-  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd-MMM-yyyy");
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SBU Daily Status Dashboard</title>
+  <link rel="stylesheet" href="style.css">
 
-  // ── Helpers ─────────────────────────────────────────────────────────────
-  const fmtPct = v => (v === null || v === undefined || isNaN(v)) ? "—" : v + "%";
-  const ach = analysis.byAchievement;
-  const oee = analysis.byOEE;
+  <style>
+    /* ============================================================
+       SELF-CONTAINED POLISH STYLES
+       (Works even if style.css is missing or minimal)
+       ============================================================ */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
+      color: #0f172a;
+      min-height: 100vh;
+    }
 
-  // Tile builder for best/worst highlight cards
-  function tile(label, sbu, kpiLabel, kpiValue, gradFrom, gradTo, accent) {
-    return `
-    <div style="flex:1;min-width:200px;background:linear-gradient(135deg,${gradFrom},${gradTo});
-                color:#fff;padding:14px 16px;border-radius:10px;
-                box-shadow:0 2px 6px rgba(0,0,0,.12)">
-      <div style="font-size:11px;letter-spacing:.5px;opacity:.9;text-transform:uppercase">${label}</div>
-      <div style="font-size:20px;font-weight:700;margin:4px 0 6px">
-        ${sbu ? sbu.name : "—"}
-      </div>
-      <div style="font-size:12px;opacity:.95">
-        ${kpiLabel}: <b>${sbu ? fmtPct(sbu[kpiValue]) : "—"}</b>
-      </div>
-    </div>`;
-  }
+    /* Header */
+    header {
+      background: linear-gradient(135deg, #003366 0%, #0369a1 100%);
+      color: #fff;
+      padding: 20px 28px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.15);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: .3px;
+    }
+    header #lastUpdate {
+      margin: 4px 0 0;
+      font-size: 12px;
+      opacity: .9;
+    }
+    header button {
+      background: #fff;
+      color: #003366;
+      border: none;
+      padding: 9px 18px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+      box-shadow: 0 2px 4px rgba(0,0,0,.1);
+      transition: transform .15s ease, box-shadow .15s ease;
+    }
+    header button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0,0,0,.15);
+    }
 
-  // Ranking table builder (top 3 + bottom 1 style)
-  function rankTable(title, sortedList, field, color) {
-    if (!sortedList.length) return "";
-    const rows = sortedList.map((x, i) => {
-      const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i+1}.`;
+    /* Section title */
+    .section-title {
+      margin: 22px 28px 10px;
+      font-size: 18px;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Summary tiles */
+    .snap-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      padding: 0 28px;
+      margin-bottom: 16px;
+    }
+    .tile {
+      padding: 16px 18px;
+      border-radius: 12px;
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(0,0,0,.12);
+      transition: transform .15s ease;
+    }
+    .tile:hover { transform: translateY(-2px); }
+    .tile .lbl {
+      font-size: 11px;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      opacity: .92;
+      font-weight: 600;
+    }
+    .tile .nm  {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 6px 0 8px;
+      line-height: 1.1;
+    }
+    .tile .v   {
+      font-size: 13px;
+      opacity: .96;
+    }
+    .tile .v b { font-size: 16px; }
+
+    .t-best-ach { background: linear-gradient(135deg, #10b981 0%, #047857 100%); }
+    .t-best-oee { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); }
+    .t-low-ach  { background: linear-gradient(135deg, #f97316 0%, #c2410c 100%); }
+    .t-low-oee  { background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); }
+
+    /* Ranking lists */
+    .rank-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+      padding: 0 28px;
+      margin-bottom: 16px;
+    }
+    .rank-box {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    }
+    .rank-box h4 {
+      margin: 0 0 10px;
+      color: #0f172a;
+      font-size: 14px;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 6px;
+    }
+    .rank-box table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .rank-box td {
+      padding: 7px 4px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .rank-box td:first-child { width: 28px; text-align: center; }
+    .rank-box td:last-child  { text-align: right; font-weight: 700; }
+    .rank-box tr:last-child td { border-bottom: none; }
+    .rank-ach td:last-child { color: #047857; }
+    .rank-oee td:last-child { color: #1d4ed8; }
+
+    /* Drop alert */
+    .drop-box {
+      background: #fff7ed;
+      border-left: 4px solid #f97316;
+      padding: 14px 16px;
+      border-radius: 8px;
+      margin: 0 28px 20px;
+      font-size: 14px;
+    }
+    .drop-box b { color: #9a3412; }
+    .drop-box ul { margin: 8px 0 0; padding-left: 20px; }
+    .drop-box li { padding: 3px 0; }
+    .drop-box .ok { color: #65a30d; margin-top: 6px; display: block; }
+
+    /* Cards grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 16px;
+      padding: 0 28px 28px;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px 18px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.06);
+      position: relative;
+      transition: transform .15s ease, box-shadow .15s ease;
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 14px rgba(0,0,0,.1);
+    }
+    .card h2 {
+      margin: 0 0 4px;
+      color: #003366;
+      font-size: 18px;
+      border-bottom: 2px solid #003366;
+      padding-bottom: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .card .date {
+      display: block;
+      font-size: 11px;
+      color: #64748b;
+      margin-bottom: 10px;
+    }
+    .card .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin: 10px 0;
+    }
+    .card .kpis > div {
+      background: #f1f5f9;
+      padding: 8px 4px;
+      border-radius: 6px;
+      text-align: center;
+    }
+    .card .kpis b {
+      display: block;
+      font-size: 15px;
+      color: #0f172a;
+    }
+    .card .kpis span {
+      font-size: 10px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: .3px;
+    }
+    .card p {
+      font-size: 12.5px;
+      margin: 6px 0;
+      color: #334155;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 12px;
+      font-size: 10px;
+      color: #fff;
+      font-weight: 700;
+      letter-spacing: .3px;
+    }
+    .b-best-ach { background: #10b981; }
+    .b-best-oee { background: #3b82f6; }
+    .b-low-ach  { background: #f97316; }
+    .b-low-oee  { background: #ef4444; }
+
+    /* Loading & error */
+    .loading, .error {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 40px;
+      color: #64748b;
+      font-size: 15px;
+    }
+    .error { color: #b91c1c; }
+
+    @media (max-width: 600px) {
+      header { padding: 16px; }
+      header h1 { font-size: 18px; }
+      .section-title, .snap-grid, .rank-grid, .drop-box, .grid { padding-left: 14px; padding-right: 14px; margin-left: 0; margin-right: 0; }
+      .card .kpis { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div>
+      <h1>📊 SBU Daily Status Dashboard</h1>
+      <p id="lastUpdate">Loading…</p>
+    </div>
+    <button onclick="loadData()">🔄 Refresh</button>
+  </header>
+
+  <h3 class="section-title">🧭 Performance Snapshot — Dual KPI View</h3>
+  <section id="summary"></section>
+
+  <h3 class="section-title">🏭 SBU Details</h3>
+  <main id="cards" class="grid"><div class="loading">Loading…</div></main>
+
+  <script>
+    /* ==========================================================
+       API ENDPOINT — Apps Script Web App
+       ========================================================== */
+    const API = "https://script.google.com/macros/s/AKfycbykeUhIFbFr0UD7iF2T2DFg4BxyqPgOXS30bIokmKhBvdLhjAKWEGnx1Z86nubs15CQRw/exec";
+
+    /* ==========================================================
+       LOAD DATA
+       ========================================================== */
+    async function loadData() {
+      document.getElementById("cards").innerHTML = '<div class="loading">Loading…</div>';
+      document.getElementById("summary").innerHTML = "";
+      try {
+        const r = await fetch(API);
+        const j = await r.json();
+        renderSummary(j.analysis);
+        render(j.data, j.analysis);
+        document.getElementById("lastUpdate").textContent =
+          "Last refresh: " + new Date().toLocaleString();
+      } catch (e) {
+        document.getElementById("cards").innerHTML =
+          '<div class="error">❌ Error loading data: ' + e.message + '</div>';
+      }
+    }
+
+    /* ==========================================================
+       HELPERS
+       ========================================================== */
+    const fmtPct = v => (v === null || v === undefined || isNaN(v)) ? "—" : v + "%";
+
+    function tile(cls, label, sbu, field, kpiLabel) {
+      const name = sbu ? sbu.name : "—";
+      const val  = sbu ? fmtPct(sbu[field]) : "—";
       return `
-        <tr>
-          <td style="padding:6px 8px;border-bottom:1px solid #eef2f7">${medal}</td>
-          <td style="padding:6px 8px;border-bottom:1px solid #eef2f7"><b>${x.name}</b></td>
-          <td style="padding:6px 8px;border-bottom:1px solid #eef2f7;text-align:right;color:${color}">
-            <b>${fmtPct(x[field])}</b>
-          </td>
-        </tr>`;
-    }).join("");
-    return `
-      <div style="flex:1;min-width:240px;background:#fff;border:1px solid #e2e8f0;
-                  border-radius:8px;padding:10px 12px">
-        <div style="font-weight:700;color:#0f172a;margin-bottom:6px">${title}</div>
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          ${rows}
-        </table>
-      </div>`;
-  }
+        <div class="tile ${cls}">
+          <div class="lbl">${label}</div>
+          <div class="nm">${name}</div>
+          <div class="v">${kpiLabel}: <b>${val}</b></div>
+        </div>`;
+    }
 
-  // ── Performance Snapshot Block ──────────────────────────────────────────
-  const summary = `
-  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;
-              margin:14px 0;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.05)">
-    <h3 style="margin:0 0 14px;color:#003366;border-bottom:2px solid #003366;padding-bottom:6px">
-      🧭 Performance Snapshot — Dual KPI View
-    </h3>
+    function rankBox(title, sorted, field, cls) {
+      if (!sorted || !sorted.length)
+        return `<div class="rank-box"><h4>${title}</h4><i style="color:#94a3b8;font-size:12px">No data</i></div>`;
+      const rows = sorted.map((x, i) => {
+        const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1) + ".";
+        return `<tr><td>${medal}</td><td><b>${x.name}</b></td><td>${fmtPct(x[field])}</td></tr>`;
+      }).join("");
+      return `
+        <div class="rank-box ${cls}">
+          <h4>${title}</h4>
+          <table>${rows}</table>
+        </div>`;
+    }
 
-    <!-- Highlight tiles: 4 cards in a flex row -->
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-      ${tile("🏆 Best by Achievement", ach.best,  "Achievement", "achievement", "#10b981", "#047857")}
-      ${tile("🚀 Best by OEE",         oee.best,  "OEE",         "oee",         "#3b82f6", "#1d4ed8")}
-      ${tile("⚠️ Lowest by Achievement", ach.worst, "Achievement", "achievement", "#f97316", "#c2410c")}
-      ${tile("🛑 Lowest by OEE",       oee.worst, "OEE",         "oee",         "#ef4444", "#b91c1c")}
-    </div>
+    /* ==========================================================
+       RENDER SUMMARY (Top of dashboard)
+       ========================================================== */
+    function renderSummary(a) {
+      if (!a) {
+        document.getElementById("summary").innerHTML =
+          '<div class="error">No analysis data received.</div>';
+        return;
+      }
 
-    <!-- Ranking tables -->
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-      ${rankTable("📈 Achievement Ranking", ach.sorted, "achievement", "#047857")}
-      ${rankTable("⚙️ OEE Ranking",         oee.sorted, "oee",         "#1d4ed8")}
-    </div>
+      // Support BOTH new dual-KPI shape and old single-KPI shape (graceful fallback)
+      const ach = a.byAchievement || (a.best ? { best: a.best, worst: a.worst, sorted: [] } : { best: null, worst: null, sorted: [] });
+      const oee = a.byOEE         || { best: null, worst: null, sorted: [] };
 
-    <!-- Production drops -->
-    <div style="background:#fff7ed;border-left:4px solid #f97316;
-                padding:12px 14px;border-radius:6px">
-      <b style="color:#9a3412">📉 SBUs With Production Drop (vs previous day)</b><br>
-      ${analysis.dropped.length
-        ? `<div style="margin-top:6px">` + analysis.dropped.map(d =>
-            `<div style="padding:4px 0;border-bottom:1px dashed #fed7aa">
-               • <b>${d.name}</b> — ${d.prevYesterday} → ${d.yesterday}
-               <span style="color:#b91c1c;font-weight:700">(${d.drop.toFixed(2)})</span>
-             </div>`
-          ).join("") + `</div>`
-        : `<div style="margin-top:4px;color:#65a30d"><i>✓ No production drop detected (or first run — baseline saved).</i></div>`}
-    </div>
-  </div>`;
+      const dropsHtml = (a.dropped && a.dropped.length)
+        ? `<ul>${a.dropped.map(d =>
+            `<li><b>${d.name}</b>: ${d.prevYesterday} → ${d.yesterday}
+             <span style="color:#b91c1c;font-weight:700">(${d.drop.toFixed(2)})</span></li>`
+          ).join("")}</ul>`
+        : `<span class="ok">✓ No production drop detected (or first run — baseline saved).</span>`;
 
-  // ── Main email body ─────────────────────────────────────────────────────
-  let html = `
-  <div style="font-family:Arial,sans-serif;max-width:920px;margin:auto;background:#f8fafc;padding:16px">
-    <div style="background:linear-gradient(135deg,#003366,#0369a1);color:#fff;
-                padding:16px 20px;border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,.1)">
-      <h2 style="margin:0">📊 Daily SBU Production & Quality Status</h2>
-      <p style="margin:4px 0 0;font-size:13px;opacity:.9">Report Date: ${today}</p>
-    </div>
-    <p style="text-align:center;margin:14px 0">
-      <a href="${WEBAPP_URL}" style="background:#0369a1;color:#fff;text-decoration:none;
-         padding:10px 22px;border-radius:6px;font-size:14px;font-weight:600;
-         box-shadow:0 2px 4px rgba(0,0,0,.1)">
-         🌐 Open Live Dashboard
-      </a>
-    </p>
-    ${summary}`;
-
-  // ── Per-SBU detailed cards (with multi-badge support) ──────────────────
-  data.forEach(s => {
-    const badges = [];
-    if (ach.best  && ach.best.name  === s.name) badges.push(`<span style="background:#10b981;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;margin-left:6px">BEST · ACH</span>`);
-    if (oee.best  && oee.best.name  === s.name) badges.push(`<span style="background:#3b82f6;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;margin-left:6px">BEST · OEE</span>`);
-    if (ach.worst && ach.worst.name === s.name) badges.push(`<span style="background:#f97316;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;margin-left:6px">LOW · ACH</span>`);
-    if (oee.worst && oee.worst.name === s.name) badges.push(`<span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;margin-left:6px">LOW · OEE</span>`);
-    const tag = badges.join("");
-
-    html += `
-    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;
-                margin:14px 0;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)">
-      <h3 style="color:#003366;margin:0 0 10px;border-bottom:2px solid #003366;padding-bottom:6px">
-        ${s.name} ${tag}
-        <span style="font-size:12px;color:#64748b;float:right">${s.date}</span>
-      </h3>
-
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <tr style="background:#f1f5f9">
-          <th style="padding:8px;border:1px solid #e2e8f0">Yesterday Prod.</th>
-          <th style="padding:8px;border:1px solid #e2e8f0">Achievement %</th>
-          <th style="padding:8px;border:1px solid #e2e8f0">OEE %</th>
-          <th style="padding:8px;border:1px solid #e2e8f0">NPT %</th>
-          <th style="padding:8px;border:1px solid #e2e8f0">MTD Prod.</th>
-        </tr>
-        <tr style="text-align:center">
-          <td style="padding:8px;border:1px solid #e2e8f0"><b>${s.production.yesterday}</b></td>
-          <td style="padding:8px;border:1px solid #e2e8f0">${s.production.achievement}</td>
-          <td style="padding:8px;border:1px solid #e2e8f0">${s.production.oee}</td>
-          <td style="padding:8px;border:1px solid #e2e8f0">${s.production.npt}</td>
-          <td style="padding:8px;border:1px solid #e2e8f0"><b>${s.mtdProduction}</b></td>
-        </tr>
-      </table>
-
-      <p style="margin:10px 0 4px;font-size:13px">
-        <b>Yesterday Downtime:</b> ${s.npt.yesterdayDowntime} &nbsp;|&nbsp;
-        <b>MTD Downtime:</b> ${s.npt.mtdDowntime}
-      </p>
-
-      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px">
-        <tr style="background:#fef3c7">
-          <th style="padding:6px;border:1px solid #fcd34d;text-align:left">Breakdown Type</th>
-          <th style="padding:6px;border:1px solid #fcd34d;text-align:left">Reason</th>
-          <th style="padding:6px;border:1px solid #fcd34d;text-align:left">Downtime</th>
-        </tr>
-        ${s.npt.topReasons.map(row =>
-          `<tr>
-            <td style="padding:5px;border:1px solid #fde68a">${row[0]||"—"}</td>
-            <td style="padding:5px;border:1px solid #fde68a">${row[1]||"—"}</td>
-            <td style="padding:5px;border:1px solid #fde68a">${row[2]||"—"}</td>
-           </tr>`
-        ).join("")}
-      </table>
-
-      <div style="background:#f0f9ff;padding:10px;border-radius:6px;margin-top:10px;font-size:13px">
-        <b>Quality:</b> 5S: ${s.quality.fiveS} | QCP %: ${s.quality.qcp} |
-        Test Done: ${s.quality.testDone} | Audit: ${s.quality.totalAudit} (Pass: ${s.quality.pass})<br>
-        <b>Notable Activity:</b> ${s.quality.notable || "—"}
-      </div>
-
-      <div style="display:flex;gap:10px;margin-top:10px;font-size:13px">
-        <div style="flex:1;background:#ecfdf5;padding:8px;border-radius:6px">
-          <b>Kaizen</b><br>
-          ✅ Complete: ${s.kaizen.complete}<br>
-          🟡 Initiated: ${s.kaizen.initiated}<br>
-          ❌ Rejected: ${s.kaizen.rejected}
+      document.getElementById("summary").innerHTML = `
+        <div class="snap-grid">
+          ${tile("t-best-ach", "🏆 Best by Achievement",   ach.best,  "achievement", "Achievement")}
+          ${tile("t-best-oee", "🚀 Best by OEE",           oee.best,  "oee",         "OEE")}
+          ${tile("t-low-ach",  "⚠️ Lowest by Achievement", ach.worst, "achievement", "Achievement")}
+          ${tile("t-low-oee",  "🛑 Lowest by OEE",         oee.worst, "oee",         "OEE")}
         </div>
-        <div style="flex:1;background:#fef2f2;padding:8px;border-radius:6px">
-          <b>Problem Solving Cards</b><br>
-          🔄 Ongoing: ${s.psCards.ongoing}<br>
-          ✅ Complete: ${s.psCards.complete}
-        </div>
-      </div>
-    </div>`;
-  });
 
-  html += `
-    <p style="text-align:center;margin-top:20px;font-size:11px;color:#888">
-      Auto-generated from Google Sheets · <a href="${WEBAPP_URL}">View Live Dashboard</a>
-    </p>
-  </div>`;
-  return html;
-}
+        <div class="rank-grid">
+          ${rankBox("📈 Achievement Ranking", ach.sorted, "achievement", "rank-ach")}
+          ${rankBox("⚙️ OEE Ranking",         oee.sorted, "oee",         "rank-oee")}
+        </div>
+
+        <div class="drop-box">
+          <b>📉 SBUs With Production Drop (vs previous day)</b>
+          ${dropsHtml}
+        </div>
+      `;
+    }
+
+    /* ==========================================================
+       RENDER SBU CARDS (with multi-badge support)
+       ========================================================== */
+    function render(list, a) {
+      const ach = (a && a.byAchievement) || {};
+      const oee = (a && a.byOEE) || {};
+
+      const achBest  = ach.best  ? ach.best.name  : (a && a.best  ? a.best.name  : null);
+      const achWorst = ach.worst ? ach.worst.name : (a && a.worst ? a.worst.name : null);
+      const oeeBest  = oee.best  ? oee.best.name  : null;
+      const oeeWorst = oee.worst ? oee.worst.name : null;
+
+      if (!list || !list.length) {
+        document.getElementById("cards").innerHTML =
+          '<div class="loading">No SBU data found.</div>';
+        return;
+      }
+
+      document.getElementById("cards").innerHTML = list.map(s => {
+        let badges = "";
+        if (s.name === achBest)  badges += `<span class="badge b-best-ach">BEST · ACH</span>`;
+        if (s.name === oeeBest)  badges += `<span class="badge b-best-oee">BEST · OEE</span>`;
+        if (s.name === achWorst) badges += `<span class="badge b-low-ach">LOW · ACH</span>`;
+        if (s.name === oeeWorst) badges += `<span class="badge b-low-oee">LOW · OEE</span>`;
+
+        return `
+        <div class="card">
+          <h2>${s.name} ${badges}</h2>
+          <span class="date">${s.date || ""}</span>
+
+          <div class="kpis">
+            <div><b>${s.production.yesterday}</b><span>Yest. Prod.</span></div>
+            <div><b>${s.production.achievement}</b><span>Achievement</span></div>
+            <div><b>${s.production.oee}</b><span>OEE</span></div>
+            <div><b>${s.production.npt}</b><span>NPT</span></div>
+          </div>
+
+          <p>📦 <b>MTD Production:</b> ${s.mtdProduction}</p>
+          <p>⏱️ <b>Downtime</b> — Yest: ${s.npt.yesterdayDowntime} | MTD: ${s.npt.mtdDowntime}</p>
+          <p>🧪 <b>Quality</b> — 5S: ${s.quality.fiveS} | QCP: ${s.quality.qcp} | Audit: ${s.quality.totalAudit}</p>
+          <p>💡 <b>Kaizen</b> — ✅ ${s.kaizen.complete} / 🟡 ${s.kaizen.initiated} / ❌ ${s.kaizen.rejected}</p>
+          <p>🗂️ <b>PS Cards</b> — 🔄 ${s.psCards.ongoing} / ✅ ${s.psCards.complete}</p>
+        </div>`;
+      }).join("");
+    }
+
+    /* Auto-load on page open */
+    loadData();
+  </script>
+</body>
+</html>
