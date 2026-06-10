@@ -4,6 +4,31 @@
   <meta charset="utf-8">
   <title>SBU Daily Status</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* Inline polish (works even without style.css) */
+    .snap-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin:14px 0; }
+    .tile { padding:14px 16px; border-radius:10px; color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.12); }
+    .tile .lbl { font-size:11px; letter-spacing:.5px; text-transform:uppercase; opacity:.9; }
+    .tile .nm  { font-size:20px; font-weight:700; margin:4px 0 6px; }
+    .tile .v   { font-size:12px; opacity:.95; }
+    .t-best-ach { background:linear-gradient(135deg,#10b981,#047857); }
+    .t-best-oee { background:linear-gradient(135deg,#3b82f6,#1d4ed8); }
+    .t-low-ach  { background:linear-gradient(135deg,#f97316,#c2410c); }
+    .t-low-oee  { background:linear-gradient(135deg,#ef4444,#b91c1c); }
+    .rank-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin:10px 0 14px; }
+    .rank-box  { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; }
+    .rank-box h4 { margin:0 0 6px; color:#0f172a; font-size:14px; }
+    .rank-box table { width:100%; border-collapse:collapse; font-size:13px; }
+    .rank-box td { padding:6px 4px; border-bottom:1px solid #eef2f7; }
+    .rank-box td:last-child { text-align:right; font-weight:700; }
+    .drop-box  { background:#fff7ed; border-left:4px solid #f97316; padding:12px 14px; border-radius:6px; }
+    .drop-box ul { margin:6px 0 0 18px; padding:0; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; color:#fff; margin-left:4px; }
+    .b-best-ach { background:#10b981; }
+    .b-best-oee { background:#3b82f6; }
+    .b-low-ach  { background:#f97316; }
+    .b-low-oee  { background:#ef4444; }
+  </style>
 </head>
 <body>
   <header>
@@ -12,13 +37,11 @@
     <button onclick="loadData()">🔄 Refresh</button>
   </header>
 
-  <!-- NEW: Performance summary section -->
-  <section id="summary" class="summary"></section>
-
+  <section id="summary"></section>
   <main id="cards" class="grid">Loading…</main>
 
   <script>
-    const API = "https://script.google.com/macros/s/AKfycbwd8lw8YI-pBIVChuelW-Xi4_0Vcdb2a-jJ370sAOzB-3yyfwrUSY9WGQs77V8UUr8pKg/exec";
+    const API = "https://script.google.com/macros/s/AKfycbyIaNp1sN-ZG3GxdsCrGUUzFAtITJ-aeaeimIBWf2TZ-fj8L0hiOTs-7O84z0rd4t4iHw/exec";
 
     async function loadData() {
       document.getElementById("cards").innerHTML = "Loading…";
@@ -35,32 +58,69 @@
       }
     }
 
+    const fmtPct = v => (v === null || v === undefined || isNaN(v)) ? "—" : v + "%";
+
+    function tile(cls, label, sbu, field, kpiLabel) {
+      const name = sbu ? sbu.name : "—";
+      const val  = sbu ? fmtPct(sbu[field]) : "—";
+      return `<div class="tile ${cls}">
+        <div class="lbl">${label}</div>
+        <div class="nm">${name}</div>
+        <div class="v">${kpiLabel}: <b>${val}</b></div>
+      </div>`;
+    }
+
+    function rankBox(title, sorted, field) {
+      if (!sorted || !sorted.length) return "";
+      const rows = sorted.map((x, i) => {
+        const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i+1)+".";
+        return `<tr><td>${medal}</td><td>${x.name}</td><td>${fmtPct(x[field])}</td></tr>`;
+      }).join("");
+      return `<div class="rank-box"><h4>${title}</h4><table>${rows}</table></div>`;
+    }
+
     function renderSummary(a) {
       if (!a) return;
-      const best  = a.best  ? `<b>${a.best.name}</b> (Ach: ${isNaN(a.best.achievement)?"—":a.best.achievement+"%"})`  : "—";
-      const worst = a.worst ? `<b>${a.worst.name}</b> (Ach: ${isNaN(a.worst.achievement)?"—":a.worst.achievement+"%"})` : "—";
-      const dropped = (a.dropped && a.dropped.length)
-        ? a.dropped.map(d => `<li>${d.name}: ${d.prevYesterday} → ${d.yesterday} (${d.drop.toFixed(2)})</li>`).join("")
-        : "<li>No production drop detected.</li>";
+      const ach = a.byAchievement || { sorted:[] };
+      const oee = a.byOEE || { sorted:[] };
+      const drops = (a.dropped && a.dropped.length)
+        ? `<ul>${a.dropped.map(d => `<li><b>${d.name}</b>: ${d.prevYesterday} → ${d.yesterday} <span style="color:#b91c1c">(${d.drop.toFixed(2)})</span></li>`).join("")}</ul>`
+        : `<div style="color:#65a30d;margin-top:4px">✓ No production drop detected.</div>`;
 
       document.getElementById("summary").innerHTML = `
-        <div class="snap best">🏆 Best Performer<br>${best}</div>
-        <div class="snap worst">⚠️ Lowest Performer<br>${worst}</div>
-        <div class="snap drop">📉 Production Drops<ul>${dropped}</ul></div>
+        <h2 style="margin:14px 0 8px">🧭 Performance Snapshot</h2>
+        <div class="snap-grid">
+          ${tile("t-best-ach","🏆 Best by Achievement", ach.best,  "achievement","Achievement")}
+          ${tile("t-best-oee","🚀 Best by OEE",         oee.best,  "oee",        "OEE")}
+          ${tile("t-low-ach", "⚠️ Lowest by Achievement",ach.worst, "achievement","Achievement")}
+          ${tile("t-low-oee", "🛑 Lowest by OEE",       oee.worst, "oee",        "OEE")}
+        </div>
+        <div class="rank-grid">
+          ${rankBox("📈 Achievement Ranking", ach.sorted, "achievement")}
+          ${rankBox("⚙️ OEE Ranking",         oee.sorted, "oee")}
+        </div>
+        <div class="drop-box">
+          <b style="color:#9a3412">📉 SBUs With Production Drop (vs previous day)</b>
+          ${drops}
+        </div>
       `;
     }
 
     function render(list, a) {
-      const bestName  = a && a.best  ? a.best.name  : null;
-      const worstName = a && a.worst ? a.worst.name : null;
+      const achBest  = a && a.byAchievement && a.byAchievement.best  ? a.byAchievement.best.name  : null;
+      const achWorst = a && a.byAchievement && a.byAchievement.worst ? a.byAchievement.worst.name : null;
+      const oeeBest  = a && a.byOEE && a.byOEE.best  ? a.byOEE.best.name  : null;
+      const oeeWorst = a && a.byOEE && a.byOEE.worst ? a.byOEE.worst.name : null;
 
       document.getElementById("cards").innerHTML = list.map(s => {
-        let badge = "";
-        if (s.name === bestName)  badge = `<span class="badge best">BEST</span>`;
-        if (s.name === worstName) badge = `<span class="badge worst">LOWEST</span>`;
+        let badges = "";
+        if (s.name === achBest)  badges += `<span class="badge b-best-ach">BEST · ACH</span>`;
+        if (s.name === oeeBest)  badges += `<span class="badge b-best-oee">BEST · OEE</span>`;
+        if (s.name === achWorst) badges += `<span class="badge b-low-ach">LOW · ACH</span>`;
+        if (s.name === oeeWorst) badges += `<span class="badge b-low-oee">LOW · OEE</span>`;
         return `
         <div class="card">
-          <h2>${s.name} ${badge}</h2>
+          <h2>${s.name} ${badges}</h2>
           <span class="date">${s.date}</span>
           <div class="kpis">
             <div><b>${s.production.yesterday}</b><span>Yesterday Prod.</span></div>
