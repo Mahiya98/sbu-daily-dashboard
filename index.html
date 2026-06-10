@@ -11,6 +11,10 @@
     <p id="lastUpdate"></p>
     <button onclick="loadData()">🔄 Refresh</button>
   </header>
+
+  <!-- NEW: Performance summary section -->
+  <section id="summary" class="summary"></section>
+
   <main id="cards" class="grid">Loading…</main>
 
   <script>
@@ -18,10 +22,12 @@
 
     async function loadData() {
       document.getElementById("cards").innerHTML = "Loading…";
+      document.getElementById("summary").innerHTML = "";
       try {
         const r = await fetch(API);
         const j = await r.json();
-        render(j.data);
+        renderSummary(j.analysis);
+        render(j.data, j.analysis);
         document.getElementById("lastUpdate").textContent =
           "Last refresh: " + new Date().toLocaleString();
       } catch (e) {
@@ -29,10 +35,32 @@
       }
     }
 
-    function render(list) {
-      document.getElementById("cards").innerHTML = list.map(s => `
+    function renderSummary(a) {
+      if (!a) return;
+      const best  = a.best  ? `<b>${a.best.name}</b> (Ach: ${isNaN(a.best.achievement)?"—":a.best.achievement+"%"})`  : "—";
+      const worst = a.worst ? `<b>${a.worst.name}</b> (Ach: ${isNaN(a.worst.achievement)?"—":a.worst.achievement+"%"})` : "—";
+      const dropped = (a.dropped && a.dropped.length)
+        ? a.dropped.map(d => `<li>${d.name}: ${d.prevYesterday} → ${d.yesterday} (${d.drop.toFixed(2)})</li>`).join("")
+        : "<li>No production drop detected.</li>";
+
+      document.getElementById("summary").innerHTML = `
+        <div class="snap best">🏆 Best Performer<br>${best}</div>
+        <div class="snap worst">⚠️ Lowest Performer<br>${worst}</div>
+        <div class="snap drop">📉 Production Drops<ul>${dropped}</ul></div>
+      `;
+    }
+
+    function render(list, a) {
+      const bestName  = a && a.best  ? a.best.name  : null;
+      const worstName = a && a.worst ? a.worst.name : null;
+
+      document.getElementById("cards").innerHTML = list.map(s => {
+        let badge = "";
+        if (s.name === bestName)  badge = `<span class="badge best">BEST</span>`;
+        if (s.name === worstName) badge = `<span class="badge worst">LOWEST</span>`;
+        return `
         <div class="card">
-          <h2>${s.name}</h2>
+          <h2>${s.name} ${badge}</h2>
           <span class="date">${s.date}</span>
           <div class="kpis">
             <div><b>${s.production.yesterday}</b><span>Yesterday Prod.</span></div>
@@ -45,7 +73,8 @@
           <p>5S: ${s.quality.fiveS} | QCP: ${s.quality.qcp} | Audit: ${s.quality.totalAudit}</p>
           <p>Kaizen — C:${s.kaizen.complete} / I:${s.kaizen.initiated} / R:${s.kaizen.rejected}</p>
           <p>PS Cards — Ongoing:${s.psCards.ongoing} / Complete:${s.psCards.complete}</p>
-        </div>`).join("");
+        </div>`;
+      }).join("");
     }
     loadData();
   </script>
